@@ -5,7 +5,12 @@ use nom::IResult;
 
 fn main() {
     let input = include_str!("../input.txt");
-    println!("Part 2: {}", part2(input));
+    let now = std::time::Instant::now();
+    let part1 = calibration_value(input);
+    println!("Part 1: {} [{:?}]", part1, now.elapsed());
+    let now = std::time::Instant::now();
+    let part2 = part2(input);
+    println!("Part 2: {} [{:?}]", part2, now.elapsed());
 }
 
 fn calibration_value(s: &str) -> u32 {
