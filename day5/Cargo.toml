@@ -4,5 +4,4 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-range-set = "0.0.10"
 rangemap = "1.4.0"
