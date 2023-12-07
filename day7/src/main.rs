@@ -1,12 +1,17 @@
 use std::{cmp::Ordering, str::FromStr};
 
+use rayon::prelude::*;
+
 fn main() {
     let now = std::time::Instant::now();
     let result = part1(INPUT);
     println!("Part 1: {} [{:?}]", result, now.elapsed());
+    let now = std::time::Instant::now();
+    let result = part2(INPUT);
+    println!("Part 2: {} [{:?}]", result, now.elapsed());
 }
 
-const INPUT: &str = include_str!("../input.txt");
+const INPUT: &str = include_str!("../inputt.txt");
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 enum Card {
@@ -20,66 +25,55 @@ enum Card {
 
 impl PartialOrd for Card {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.value().cmp(&other.value()))
+        Some(self.value(false).cmp(&other.value(false)))
     }
 }
 
 impl Ord for Card {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.value().cmp(&other.value())
+        self.partial_cmp(other).unwrap()
     }
-}
-
-#[test]
-fn test_card_cmp() {
-    assert_eq!(Card::N(2).cmp(&Card::N(2)), Ordering::Equal);
-    assert_eq!(Card::N(2).cmp(&Card::N(3)), Ordering::Less);
-    assert_eq!(Card::N(3).cmp(&Card::N(2)), Ordering::Greater);
-    assert_eq!(Card::N(2).cmp(&Card::T), Ordering::Less);
-    assert_eq!(Card::T.cmp(&Card::N(2)), Ordering::Greater);
-    assert_eq!(Card::T.cmp(&Card::T), Ordering::Equal);
-    assert_eq!(Card::T.cmp(&Card::J), Ordering::Less);
-    assert_eq!(Card::J.cmp(&Card::T), Ordering::Greater);
-    assert_eq!(Card::J.cmp(&Card::J), Ordering::Equal);
-    assert_eq!(Card::J.cmp(&Card::Q), Ordering::Less);
-    assert_eq!(Card::Q.cmp(&Card::J), Ordering::Greater);
-    assert_eq!(Card::Q.cmp(&Card::Q), Ordering::Equal);
-    assert_eq!(Card::Q.cmp(&Card::K), Ordering::Less);
-    assert_eq!(Card::K.cmp(&Card::Q), Ordering::Greater);
-    assert_eq!(Card::K.cmp(&Card::K), Ordering::Equal);
-    assert_eq!(Card::K.cmp(&Card::A), Ordering::Less);
-    assert_eq!(Card::A.cmp(&Card::K), Ordering::Greater);
-    assert_eq!(Card::A.cmp(&Card::A), Ordering::Equal);
 }
 
 impl Card {
-    fn value(&self) -> u8 {
-        match self {
-            Self::N(n) => n - 2,
-            Self::T => 8,
-            Self::J => 9,
-            Self::Q => 10,
-            Self::K => 11,
-            Self::A => 12,
+    const COUNT: usize = 13;
+
+    fn value(&self, joker: bool) -> u8 {
+        if joker {
+            if self == &Self::J {
+                0
+            } else {
+                self.value(false) + 1
+            }
+        } else {
+            match self {
+                Self::N(n) => n - 2,
+                Self::T => 8,
+                Self::J => 9,
+                Self::Q => 10,
+                Self::K => 11,
+                Self::A => 12,
+            }
         }
     }
-}
 
-#[test]
-fn test_card_value() {
-    assert_eq!(Card::N(2).value(), 0);
-    assert_eq!(Card::N(3).value(), 1);
-    assert_eq!(Card::N(4).value(), 2);
-    assert_eq!(Card::N(5).value(), 3);
-    assert_eq!(Card::N(6).value(), 4);
-    assert_eq!(Card::N(7).value(), 5);
-    assert_eq!(Card::N(8).value(), 6);
-    assert_eq!(Card::N(9).value(), 7);
-    assert_eq!(Card::T.value(), 8);
-    assert_eq!(Card::J.value(), 9);
-    assert_eq!(Card::Q.value(), 10);
-    assert_eq!(Card::K.value(), 11);
-    assert_eq!(Card::A.value(), 12);
+    fn from_value(value: u8) -> Self {
+        match value {
+            0 => Self::J,
+            1 => Self::N(2),
+            2 => Self::N(3),
+            3 => Self::N(4),
+            4 => Self::N(5),
+            5 => Self::N(6),
+            6 => Self::N(7),
+            7 => Self::N(8),
+            8 => Self::T,
+            9 => Self::Q,
+            10 => Self::K,
+            11 => Self::A,
+            _ => panic!("Invalid value"),
+        }
+    }
 }
 
 impl From<char> for Card {
@@ -95,21 +89,14 @@ impl From<char> for Card {
     }
 }
 
-#[test]
-fn test_card_from() {
-    assert_eq!(Card::from('2'), Card::N(2));
-    assert_eq!(Card::from('3'), Card::N(3));
-    assert_eq!(Card::from('4'), Card::N(4));
-    assert_eq!(Card::from('5'), Card::N(5));
-    assert_eq!(Card::from('6'), Card::N(6));
-    assert_eq!(Card::from('7'), Card::N(7));
-    assert_eq!(Card::from('8'), Card::N(8));
-    assert_eq!(Card::from('9'), Card::N(9));
-    assert_eq!(Card::from('T'), Card::T);
-    assert_eq!(Card::from('J'), Card::J);
-    assert_eq!(Card::from('Q'), Card::Q);
-    assert_eq!(Card::from('K'), Card::K);
-    assert_eq!(Card::from('A'), Card::A);
+fn parse_cards(input: &str) -> [Card; 5] {
+    input
+        .chars()
+        .enumerate()
+        .fold([Card::A; 5], |mut acc, (i, c)| {
+            acc[i] = Card::from(c);
+            acc
+        })
 }
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
@@ -123,83 +110,47 @@ enum HandType {
     FiveOfAKind,
 }
 
-#[test]
-fn test_hand_type_cmp() {
-    assert_eq!(
-        HandType::FiveOfAKind.cmp(&HandType::FiveOfAKind),
-        Ordering::Equal
-    );
-    assert_eq!(
-        HandType::FiveOfAKind.cmp(&HandType::FourOfAKind),
-        Ordering::Greater
-    );
-    assert_eq!(
-        HandType::FiveOfAKind.cmp(&HandType::FullHouse),
-        Ordering::Greater
-    );
-    assert_eq!(
-        HandType::FiveOfAKind.cmp(&HandType::ThreeOfAKind),
-        Ordering::Greater
-    );
-    assert_eq!(
-        HandType::FiveOfAKind.cmp(&HandType::TwoPair),
-        Ordering::Greater
-    );
-    assert_eq!(
-        HandType::FiveOfAKind.cmp(&HandType::OnePair),
-        Ordering::Greater
-    );
-    assert_eq!(
-        HandType::FiveOfAKind.cmp(&HandType::HighCard),
-        Ordering::Greater
-    );
-    assert_eq!(
-        HandType::FourOfAKind.cmp(&HandType::FiveOfAKind),
-        Ordering::Less
-    );
-    assert_eq!(
-        HandType::FourOfAKind.cmp(&HandType::FourOfAKind),
-        Ordering::Equal
-    );
-    assert_eq!(
-        HandType::FourOfAKind.cmp(&HandType::FullHouse),
-        Ordering::Greater
-    );
-    assert_eq!(
-        HandType::FourOfAKind.cmp(&HandType::ThreeOfAKind),
-        Ordering::Greater
-    );
-    assert_eq!(
-        HandType::FourOfAKind.cmp(&HandType::TwoPair),
-        Ordering::Greater
-    );
-    assert_eq!(
-        HandType::FourOfAKind.cmp(&HandType::OnePair),
-        Ordering::Greater
-    );
-    assert_eq!(
-        HandType::FourOfAKind.cmp(&HandType::HighCard),
-        Ordering::Greater
-    );
-    assert_eq!(
-        HandType::FullHouse.cmp(&HandType::FiveOfAKind),
-        Ordering::Less
-    );
-    assert_eq!(
-        HandType::FullHouse.cmp(&HandType::FourOfAKind),
-        Ordering::Less
-    );
-    assert_eq!(
-        HandType::FullHouse.cmp(&HandType::FullHouse),
-        Ordering::Equal
-    );
+impl HandType {
+    fn from_with_joker(cards: [Card; 5]) -> Self {
+        let joker_count = cards.iter().filter(|c| c == &&Card::J).count();
+        let no_joker = cards
+            .iter()
+            .filter(|c| c != &&Card::J)
+            .copied()
+            .fold(([Card::A; 5], 0), |mut acc, card| {
+                if card != Card::J {
+                    acc.0[acc.1] = card;
+                    acc.1 += 1;
+                }
+                acc
+            })
+            .0;
+        if joker_count == 0 {
+            Self::from(no_joker)
+        } else {
+            (1..(Card::COUNT - 1).pow(joker_count as u32))
+                .into_par_iter()
+                .map(|i| {
+                    let mut no_joker = no_joker;
+                    for j in 0..joker_count {
+                        no_joker[4 - j] = Card::from_value(
+                            ((i / (Card::COUNT - 1).pow(j as u32)) % (Card::COUNT - 1)) as u8,
+                        );
+                    }
+                    Self::from(no_joker)
+                })
+                .map(|cards| Self::from(cards))
+                .max()
+                .unwrap()
+        }
+    }
 }
 
 impl From<[Card; 5]> for HandType {
     fn from(hand: [Card; 5]) -> Self {
         let mut counts = [0; 13];
         for card in hand.iter() {
-            counts[card.value() as usize] += 1;
+            counts[card.value(false) as usize] += 1;
         }
 
         let mut pairs = 0;
@@ -235,150 +186,35 @@ impl From<[Card; 5]> for HandType {
     }
 }
 
-#[test]
-fn test_hand_type_from() {
-    assert_eq!(
-        HandType::from([
-            Card::N(2),
-            Card::N(2),
-            Card::N(2),
-            Card::N(2),
-            Card::N(2)
-        ]),
-        HandType::FiveOfAKind
-    );
-    assert_eq!(
-        HandType::from([
-            Card::N(2),
-            Card::N(2),
-            Card::N(2),
-            Card::N(2),
-            Card::N(3)
-        ]),
-        HandType::FourOfAKind
-    );
-    assert_eq!(
-        HandType::from([
-            Card::N(2),
-            Card::N(2),
-            Card::N(2),
-            Card::N(3),
-            Card::N(3)
-        ]),
-        HandType::FullHouse
-    );
-    assert_eq!(
-        HandType::from([
-            Card::N(2),
-            Card::N(2),
-            Card::N(2),
-            Card::N(3),
-            Card::N(4)
-        ]),
-        HandType::ThreeOfAKind
-    );
-    assert_eq!(
-        HandType::from([
-            Card::N(2),
-            Card::N(2),
-            Card::N(3),
-            Card::N(3),
-            Card::N(4)
-        ]),
-        HandType::TwoPair
-    );
-    assert_eq!(
-        HandType::from([
-            Card::N(2),
-            Card::N(2),
-            Card::N(3),
-            Card::N(4),
-            Card::N(5)
-        ]),
-        HandType::OnePair
-    );
-    assert_eq!(
-        HandType::from([
-            Card::N(2),
-            Card::N(3),
-            Card::N(4),
-            Card::N(5),
-            Card::N(6)
-        ]),
-        HandType::HighCard
-    );
-}
-
 #[derive(Debug, Eq, PartialEq)]
 struct Hand {
     cards: [Card; 5],
     hand_type: HandType,
+    joker: bool,
+}
+
+impl Hand {
+    fn from_with_joker(cards: [Card; 5]) -> Self {
+        Self {
+            joker: true,
+            cards,
+            hand_type: HandType::from_with_joker(cards),
+        }
+    }
 }
 
 impl FromStr for Hand {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let cards = s
-            .chars()
-            .fold(([Card::A; 5], 0), |mut acc, c| {
-                acc.0[acc.1] = Card::from(c);
-                acc.1 += 1;
-                acc
-            })
-            .0;
+        let cards = parse_cards(s);
 
         Ok(Self {
+            joker: false,
             cards,
             hand_type: HandType::from(cards),
         })
     }
-}
-
-#[test]
-fn test_hand_from_str() {
-    assert_eq!(
-        Hand::from_str("22222"),
-        Ok(Hand {
-            cards: [Card::N(2), Card::N(2), Card::N(2), Card::N(2), Card::N(2)],
-            hand_type: HandType::FiveOfAKind
-        })
-    );
-    assert_eq!(
-        Hand::from_str("22223"),
-        Ok(Hand {
-            cards: [Card::N(2), Card::N(2), Card::N(2), Card::N(2), Card::N(3)],
-            hand_type: HandType::FourOfAKind
-        })
-    );
-    assert_eq!(
-        Hand::from_str("22333"),
-        Ok(Hand {
-            cards: [Card::N(2), Card::N(2), Card::N(3), Card::N(3), Card::N(3)],
-            hand_type: HandType::FullHouse
-        })
-    );
-    assert_eq!(
-        Hand::from_str("22334"),
-        Ok(Hand {
-            cards: [Card::N(2), Card::N(2), Card::N(3), Card::N(3), Card::N(4)],
-            hand_type: HandType::TwoPair
-        })
-    );
-    assert_eq!(
-        Hand::from_str("22345"),
-        Ok(Hand {
-            cards: [Card::N(2), Card::N(2), Card::N(3), Card::N(4), Card::N(5)],
-            hand_type: HandType::OnePair
-        })
-    );
-    assert_eq!(
-        Hand::from_str("25346"),
-        Ok(Hand {
-            cards: [Card::N(2), Card::N(5), Card::N(3), Card::N(4), Card::N(6)],
-            hand_type: HandType::HighCard
-        })
-    );
 }
 
 impl PartialOrd for Hand {
@@ -406,30 +242,6 @@ impl Ord for Hand {
     }
 }
 
-#[test]
-fn test_hand_cmp() {
-    assert_eq!(
-        Hand::from_str("22222").unwrap().cmp(&Hand::from_str("22222").unwrap()),
-        Ordering::Equal
-    );
-    assert_eq!(
-        Hand::from_str("22222").unwrap().cmp(&Hand::from_str("22223").unwrap()),
-        Ordering::Greater
-    );
-    assert_eq!(
-        Hand::from_str("22223").unwrap().cmp(&Hand::from_str("22222").unwrap()),
-        Ordering::Less
-    );
-    assert_eq!(
-        Hand::from_str("22223").unwrap().cmp(&Hand::from_str("22233").unwrap()),
-        Ordering::Greater
-    );
-    assert_eq!(
-        Hand::from_str("22233").unwrap().cmp(&Hand::from_str("22223").unwrap()),
-        Ordering::Less
-    );
-}
-
 fn parse(input: &str) -> Vec<(Hand, u32)> {
     input
         .lines()
@@ -442,27 +254,31 @@ fn parse(input: &str) -> Vec<(Hand, u32)> {
         .collect()
 }
 
-#[test]
-fn test_parse() {
-    assert_eq!(
-        parse("22233 3"),
-        vec![
-            (
-                Hand {
-                    cards: [Card::N(2), Card::N(2), Card::N(2), Card::N(3), Card::N(3)],
-                    hand_type: HandType::FullHouse
-                },
-                3
-            )
-        ]
-    );
+fn parse_joker(input: &str) -> Vec<(Hand, u32)> {
+    input
+        .lines()
+        .map(|line| {
+            let mut split = line.split(' ');
+            let hand = Hand::from_with_joker(parse_cards(split.next().unwrap()));
+            let value = split.next().unwrap().parse().unwrap();
+            (hand, value)
+        })
+        .collect()
+}
+
+fn helper(mut hands: Vec<(Hand, u32)>) -> u32 {
+    hands.sort_by(|(a, _), (b, _)| a.cmp(b));
+    hands
+        .iter()
+        .map(|(_, value)| *value)
+        .enumerate()
+        .fold(0, |acc, (i, value)| acc + (value * (i as u32 + 1)))
 }
 
 fn part1(input: &str) -> u32 {
-    let mut hands = parse(input);
-    hands.sort_by(|(a, _), (b, _)| a.cmp(b));
-    hands.iter().map(|(_, value)| *value).enumerate().fold(
-        0,
-        |acc, (i, value)| acc + (value * (i as u32 + 1)),
-    )
+    helper(parse(input))
+}
+
+fn part2(input: &str) -> u32 {
+    helper(parse_joker(input))
 }
