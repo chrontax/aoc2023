@@ -7,8 +7,7 @@ use nom::combinator::map;
 use nom::sequence::delimited;
 use nom::sequence::tuple;
 use nom::IResult;
-
-use rayon::prelude::*;
+use num::Integer;
 
 fn main() {
     let now = std::time::Instant::now();
@@ -28,19 +27,20 @@ struct Node<'a> {
     right: usize,
 }
 
+#[derive(Debug, Clone, Copy)]
 enum Step {
     Left,
     Right,
 }
 
-fn steps(line: &str) -> impl Iterator<Item = Step> + '_ {
+fn steps(line: &str) -> Vec<Step> {
     line.chars()
         .map(|c| match c {
             'L' => Step::Left,
             'R' => Step::Right,
             _ => panic!("Invalid character: {}", c),
         })
-        .cycle()
+        .collect::<Vec<_>>()
 }
 
 fn node_parser(input: &str) -> IResult<&str, (&str, (&str, &str))> {
@@ -74,9 +74,10 @@ fn nodes(lines: Lines) -> Vec<Node> {
     vec
 }
 
-fn part1(input: &str) -> u32 {
+fn part1(input: &str) -> u64 {
     let mut lines = input.lines();
-    let mut steps = steps(lines.next().unwrap());
+    let steps = steps(lines.next().unwrap());
+    let mut steps = steps.iter().cycle();
     let mut steps_taken = 0;
     lines.next();
     let nodes = nodes(lines);
@@ -93,27 +94,29 @@ fn part1(input: &str) -> u32 {
     steps_taken
 }
 
-fn part2(input: &str) -> u32 {
+fn part2(input: &str) -> u64 {
     let mut lines = input.lines();
-    let mut steps = steps(lines.next().unwrap());
-    let mut steps_taken = 0;
+    let steps = steps(lines.next().unwrap());
     lines.next();
     let nodes = nodes(lines);
-    let mut cur_nodes = nodes
+    let start_nodes = nodes
         .iter()
         .filter(|n| n.name.ends_with('A'))
-        .cloned()
         .collect::<Vec<_>>();
-    while !cur_nodes.iter().all(|n| n.name.ends_with('Z')) {
-        let step = steps.next().unwrap();
-        steps_taken += 1;
-        cur_nodes = cur_nodes
-            .par_iter()
-            .map(|node| match step {
-                Step::Left => nodes[node.left],
-                Step::Right => nodes[node.right],
-            })
-            .collect::<Vec<_>>();
+    let mut uwu = Vec::new();
+    for node in start_nodes {
+        let mut steps = steps.iter().copied().cycle();
+        let mut node = node;
+        let mut steps_taken = 0;
+        while !node.name.ends_with('Z') {
+            let step = steps.next().unwrap();
+            steps_taken += 1;
+            node = match step {
+                Step::Left => &nodes[node.left],
+                Step::Right => &nodes[node.right],
+            }
+        }
+        uwu.push(steps_taken);
     }
-    steps_taken
+    uwu.iter().fold(1, |acc, x| acc.lcm(x))
 }
