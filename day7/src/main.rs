@@ -11,7 +11,7 @@ fn main() {
     println!("Part 2: {} [{:?}]", result, now.elapsed());
 }
 
-const INPUT: &str = include_str!("../inputt.txt");
+const INPUT: &str = include_str!("../input.txt");
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 enum Card {
